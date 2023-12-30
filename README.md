@@ -1,0 +1,1 @@
+Designed and implemented an eight-bit, four-function calculator using Verilog and Intel Quartus Prime Lite on the Intel DE-10 Lite FPGA board. The project includes key components: Input Unit, Output Unit, four-function Arithmetic Unit, all coordinated under a Control Unit. The timing analysis was also performed to ensure a skew free operation.
