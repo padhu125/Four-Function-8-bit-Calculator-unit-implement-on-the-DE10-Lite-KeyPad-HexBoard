@@ -1,0 +1,57 @@
+module GCLA4(A,B,S,Cin,Cin_addsub,Cout);
+  input [3:0]A,B;
+  input Cin;
+  input Cin_addsub;
+  output[3:0]S;
+  output Cout;
+  wire [3:0]C;
+  wire[3:0]G,P;
+  wire [3:0]NB;
+  assign NB=B^{4{Cin_addsub}};
+ assign C[0]=G[0]|(P[0]&Cin);
+ assign C[1]=G[1]|(P[1]&C[0]);
+ assign C[2]=G[2]|(P[2]&C[1]);
+ assign C[3]=G[3]|(P[3]&C[2]);
+ assign Cout=C[3];
+
+ assign S[0]=(A[0]^NB[0])^Cin;
+ assign S[1]=(A[1]^NB[1])^C[0];
+ assign S[2]=(A[2]^NB[2])^C[1];
+ assign S[3]=(A[3]^NB[3])^C[2];
+
+ assign G=A&NB;
+ assign P=A^NB;
+  endmodule
+
+module Register(D,Q,CLK,CLR);
+ parameter N=8;
+ input [N-1:0]D;
+ input CLR,CLK;
+ output reg [N-1:0]Q;
+ always@(posedge CLK,negedge CLR)
+begin
+if(CLR==1'b0)Q<=0;
+else if(CLK==1'b1)Q<=D;
+end
+endmodule
+
+
+module  arithmetic_unit(IN,Add_subtract,lnA,lnB,out,Clear,Rout,OVR,Zero,Neg,CCout,Aout,Bout);
+  input   [7:0]IN;
+  input Add_subtract,lnA,lnB,out,Clear;
+  output Zero,Neg,OVR;
+  output wire[3:0] CCout;
+  output wire [7:0] Aout,Bout,Rout;
+  wire [7:0]R;
+  wire C4;
+  GCLA4 carrylookahead1(Aout[3:0],Bout[3:0],R[3:0],~Add_subtract,~Add_subtract,C4);
+  GCLA4 carrylookahead2(Aout[7:4],Bout[7:4],R[7:4],C4,~Add_subtract,Cout);
+Register RA(IN,Aout,~lnA,Clear);
+Register RB(IN,Bout,~lnB,Clear);
+Register RR(R,Rout,~out,Clear);
+Register #(4)RCC({OVR,Neg,Zero,Cout},CCout,~out,Clear);
+assign Neg=R[7];
+assign Zero=~(R[7]|R[6]|R[5]|R[4]|R[3]|R[2]|R[1]|R[0]);
+assign OVR=R[7]^R[6];
+
+ endmodule

@@ -1,0 +1,272 @@
+//ORIGINAL
+
+
+module input_unit (input clk, reset, input [3:0] row_top, output [3:0] col_top, output [7:0] out, output add,sub,mul,div,equ);
+  
+  wire [15:0] keypad_input_out; // a variable to hold/transfer keypad_input module's 16 bit output
+  wire [7:0]  bcd_bin_out;      // a variable to hold bcd_bin module's output
+  
+  // use case here keypad_decoder use flags
+  
+  keypad_input keypad_input (.clk(clk), 
+						     .reset(reset), 
+						     .row(row_top),
+							 .col(col_top), 
+                             .out(keypad_input_out),
+                             .add(add),
+                             .sub(sub),
+                             .mul(mul),
+                             .div(div),
+                             .equ(equ));
+  
+  BCD2BinarySM BCD2BinarySM (.BCD(keypad_input_out), 
+									  .binarySM(bcd_bin_out));
+  
+  sign_mag_to_2s_comp sign_mag_to_2s_comp (.sign_mag(bcd_bin_out), 
+														 .two_comp(out));
+ 
+
+endmodule
+
+
+
+// temp top module keypad_input or Assignment_4_1
+
+module keypad_input  #( parameter DIGITS = 4)( input clk,
+																 input reset,
+															    input [3:0] row,
+															    output [3:0] col,
+															    output [(DIGITS*4)-1:0] out,
+															    output [3:0] value,
+															    output trig,
+                                                                output add,sub,mul,div,equ);
+ keypad_base keypad_base(.clk(clk),
+                         .row(row),
+                         .col(col),
+                         .value(value),
+                         .valid(trig),
+                         .add(add),
+                         .sub(sub),
+                         .mul(mul),
+                         .div(div),
+                         .equ(equ));
+  
+ shift_reg #(.COUNT(DIGITS)) shift_reg(.trig(trig),
+                                       .in(value),
+                                       .out(out),
+                                       .reset(reset));
+  
+endmodule
+
+// keypad_base module
+
+module keypad_base(input clk,
+                   input [3:0] row,
+                   output [3:0] col,
+                   output [3:0] value,
+                   output valid,
+                   output slow_clock,
+                   output sense,
+                   output valid_digit,
+                   output [3:0] inv_row,
+                   output add,sub,mul,div,equ);
+  
+ assign inv_row = ~row;
+  
+ clock_div #(.DIV(100000)) keypad_clock_divider(.clk(clk),
+                                                .clk_out(slow_clock));
+  
+ keypad_fsm keypad_fsm(.clk(slow_clock),
+                       .row(inv_row),
+                       .col(col),
+                       .sense(sense));
+  
+ keypad_decoder #(.BASE(10)) keypad_key_decoder(.row(inv_row),
+                                                .col(col),
+                                                .value(value),
+                                                .valid(valid_digit),
+                                                .add(add),
+                                                .sub(sub),
+                                                .mul(mul),
+                                                .div(div),
+                                                .equ(equ));
+  
+ assign valid = valid_digit && sense;
+  
+endmodule
+
+// clock_div module
+
+module clock_div #(parameter WIDTH = 32,parameter DIV = 50)(input clk, reset
+                                                           ,output clk_out);
+  
+ reg [WIDTH-1:0] r_reg;
+ wire [WIDTH-1:0] r_nxt;
+ reg clk_track;
+  
+ always @(posedge clk or posedge reset)
+ begin
+ if (reset)
+ begin
+ r_reg <= 0;
+ clk_track <= 1'b0;
+ end
+ else if (r_nxt == DIV)
+ begin
+ r_reg <= 0;
+ clk_track <= ~clk_track;
+ end
+   
+ else
+ r_reg <= r_nxt;
+ end
+  
+ assign r_nxt = r_reg+1;
+ assign clk_out = clk_track;
+  
+ endmodule
+
+//keypad_fsm module
+
+module keypad_fsm(input clk,
+                  input [3:0] row,
+                  output reg [3:0] col,
+                  output sense,
+                  output reg [3:0] state,
+                  output trig);
+  
+ assign trig = row[0] || row[1] || row[2] || row[3];
+ assign sense = state == 10;
+  
+ always@ (posedge clk)
+ begin
+   
+ case (state)
+  0: begin col = 4'b1111; state = 1; end
+  1: if (trig) begin state = 2; end
+  2: begin col = 4'b0001; state = 3; end
+  3: if (trig) begin state = 10; end else begin state = 4; end
+  4: begin col = 4'b0010; state = 5; end
+  5: if (trig) begin state = 10; end else begin state = 6; end
+  6: begin col = 4'b0100; state = 7; end
+  7: if (trig) begin state = 10; end else begin state = 8; end
+  8: begin col = 4'b1000; state = 9; end
+  9: if (trig) begin state = 10; end else begin state = 0; end
+  10: begin state = 11; end
+  11: if (~trig) begin state = 0; end
+ endcase
+   
+ end
+  
+endmodule
+
+// keypad_decoder module
+
+module keypad_decoder #(parameter BASE = 10)(input [3:0] row,
+                                             input [3:0] col,
+                                             output reg [3:0] value,
+                                             output reg valid,
+                                             output reg add,sub,mul,div,equ); // valid is optional signal
+  
+ always @ (row, col)
+ begin
+ if (BASE == 10)
+ begin
+   // 1 2 3 A
+   // 4 5 6 B
+  // 7 8 9 C
+  // E 0 F D
+   
+   // add,sub,mul,div,equ
+   
+ case ({row, col})
+  8'b0001_0001: begin value = 1;  add = 0; sub = 0; mul = 0; div = 0; equ = 0; valid = 1; end // 1
+  8'b0001_0010: begin value = 2;  add = 0; sub = 0; mul = 0; div = 0; equ = 0; valid = 1; end // 2
+  8'b0001_0100: begin value = 3;  add = 0; sub = 0; mul = 0; div = 0; equ = 0; valid = 1; end // 3
+  8'b0001_1000: begin value = 10; add = 1; sub = 0; mul = 0; div = 0; equ = 0; valid = 1; end // A
+  8'b0010_0001: begin value = 4;  add = 0; sub = 0; mul = 0; div = 0; equ = 0; valid = 1; end // 4
+  8'b0010_0010: begin value = 5;  add = 0; sub = 0; mul = 0; div = 0; equ = 0; valid = 1; end // 5
+  8'b0010_0100: begin value = 6;  add = 0; sub = 0; mul = 0; div = 0; equ = 0; valid = 1; end // 6
+  8'b0010_1000: begin value = 11; add = 0; sub = 1; mul = 0; div = 0; equ = 0; valid = 1; end // B
+  8'b0100_0001: begin value = 7;  add = 0; sub = 0; mul = 0; div = 0; equ = 0; valid = 1; end // 7
+  8'b0100_0010: begin value = 8;  add = 0; sub = 0; mul = 0; div = 0; equ = 0; valid = 1; end // 8
+  8'b0100_0100: begin value = 9;  add = 0; sub = 0; mul = 0; div = 0; equ = 0; valid = 1; end // 9
+  8'b0100_1000: begin value = 12; add = 0; sub = 0; mul = 1; div = 0; equ = 0; valid = 1; end // C
+  8'b1000_0001: begin value = 14; add = 0; sub = 0; mul = 0; div = 0; equ = 0; valid = 1; end // E or *
+  8'b1000_0010: begin value = 0;  add = 0; sub = 0; mul = 0; div = 0; equ = 0; valid = 1; end // 0
+  8'b1000_0100: begin value = 15; add = 0; sub = 0; mul = 0; div = 0; equ = 1; valid = 1; end // F or #
+  8'b1000_1000: begin value = 13; add = 0; sub = 0; mul = 0; div = 1; equ = 0; valid = 1; end // D
+  default:      begin value = 0;  add = 0; sub = 0; mul = 0; div = 0; equ = 0; valid = 0; end // Misc
+ endcase
+ end
+  
+ else
+ begin
+  value = 0; valid = 0; // Invalid Base
+ end
+ end
+  
+endmodule 
+
+// shift_reg_module
+
+module shift_reg #(parameter COUNT = 4, parameter WIDTH = 4)(input trig, reset, dir,
+                                                             input [WIDTH-1:0] in,
+                                                             output reg [(COUNT*WIDTH)-1:0] out);
+  
+ always@ (posedge trig, negedge reset)
+ begin
+ if (~reset)
+ out <= 0;
+ else
+ begin
+ if (dir)
+ begin // 1 = Right
+ out <= out >> WIDTH;
+ out[(COUNT*WIDTH)-1:((COUNT*WIDTH)-1)-WIDTH] <= in;
+ end
+ else
+ begin // 0 = Left
+ out <= out << WIDTH;
+ out[WIDTH-1:0] <= in;
+ end
+ end
+ end
+  
+endmodule 
+
+// BCD Sign Magnitude to Binary Sign Magnitude
+
+module BCD2BinarySM #(parameter N=8)(input [15:0] BCD,
+                                     output [N-1:0] binarySM);
+  
+ assign binarySM = BCD[15]*(8'b10000000) + BCD[11:8]*(8'b01100100) + BCD[7:4]*(8'b1010) + BCD[3:0];
+  
+endmodule 
+
+// binary sign mag to 2's complement converter module
+
+module sign_mag_to_2s_comp(input  [7:0] sign_mag,output reg [7:0] two_comp);
+
+wire sign;
+wire [6:0] mag;
+reg [7:0] neg_mag;
+
+// Extract sign and magnitude
+assign sign = sign_mag[7];
+assign mag = sign_mag[6:0];
+
+// Compute 2's complement
+always @* begin
+    if (sign) begin
+        // Negative number
+        neg_mag = ~mag + 1;
+        two_comp = {1'b1, neg_mag};
+    end else begin
+        // Positive number
+        two_comp = {1'b0, mag};
+    end
+end
+
+endmodule
+
